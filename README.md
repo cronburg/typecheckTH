@@ -10,7 +10,7 @@ a simple grammar language, an example of which can be found in
 As of the current writing of this, if you run stack test you get the following
 spliced template haskell code for a grammar visitor pattern:
 
-```bash
+```haskell
 $ stack test
 ...
 [Rule "F" [(["B","c","B"],ParensE (LamE [VarP x,VarP y,VarP z] (AppE (AppE
