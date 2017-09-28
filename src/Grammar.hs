@@ -32,16 +32,42 @@ dparse input = codegen $
     Right rules -> rules
 
 codegen :: [Rule] -> Q [Dec]
-codegen rules = [d| ast = $(lift rules) |]
+codegen rules = do
+  ast <- [d| ast = $(lift rules) |]
+  visitors <- mapM genVisitor rules
+  return $ ast ++ visitors
+
+genVisitor :: Rule -> Q Dec
+genVisitor (Rule nt rhss) =
+  let name    = mkName $ "visit_" ++ nt
+      tups    = [ ( [ mkName $ "p_" ++ show i
+                    | i <- [1 .. length as]
+                    ], exp
+                  )
+                | (as, exp) <- rhss
+                ]
+      body (params,exp) = foldl appE (return exp) (map varE params)
+      cls  (params,exp) = clause [listP $ map varP params] (normalB $ body (params,exp)) []
+  in funD name (map cls tups)
 
 prodRule :: Parser Rule
 prodRule = do
   nt <- lhs
   reservedOp ":="
+  rhss <- rhs
+  return $ Rule nt rhss
+
+rhs :: Parser [RHS]
+rhs = do
   as <- alphas
   reservedOp "~"
   exp <- haskellExp
-  return $ Rule nt as exp
+  more <- optionMaybe (reservedOp "|")
+  case more of
+    Nothing -> return [(as, exp)]
+    Just _  -> do
+      rest <- rhs
+      return ((as, exp) : rest)
 
 -- | Left hand side of a production rule
 lhs :: Parser NT
@@ -70,10 +96,11 @@ reservedOp = PT.reservedOp lexer
 identifier = PT.identifier lexer
 whitespace = PT.whiteSpace lexer
 
-data Rule   = Rule NT [Alpha] TH.Exp
-  deriving (Lift)
+data Rule   = Rule NT [RHS]
+  deriving (Lift, Eq, Show)
 
 type NT     = String
 type Term   = String
 type Alpha  = String
+type RHS    = ([Alpha], TH.Exp)
 
